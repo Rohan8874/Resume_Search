@@ -1,18 +1,178 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Resume Search</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .search-section {
+            background: #f4f4f4;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        textarea, input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #4285f4;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #3367d6;
+        }
+        .results-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .result-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            flex: 1 1 300px;
+            background: white;
+        }
+        .similarity-chart {
+            max-width: 400px;
+            margin: 20px auto;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
         <h1>Resume Search</h1>
-        <form id="searchForm">
-            <input type="text" id="query" placeholder="Enter search query..." required>
-            <button type="submit">Search</button>
-        </form>
-        <div id="results"></div>
+        
+        <div class="search-section">
+            <h2>Search Resumes</h2>
+            <textarea id="searchQuery" rows="3" placeholder="Enter job description or skills you're looking for..."></textarea>
+            <div>
+                <label for="resultCount">Number of results:</label>
+                <input type="number" id="resultCount" value="5" min="1" max="20">
+            </div>
+            <button onclick="searchResumes()">Search</button>
+        </div>
+        
+        <div id="resultsContainer" class="results-section" style="display:none;">
+            <h2>Search Results</h2>
+            <div id="results"></div>
+        </div>
+        
+        <div class="similarity-chart">
+            <canvas id="similarityChart"></canvas>
+        </div>
     </div>
-    <script src="/static/script.js"></script>
+
+    <script>
+        let similarityChart = null;
+        
+        async function searchResumes() {
+            const query = document.getElementById('searchQuery').value;
+            const count = document.getElementById('resultCount').value;
+            
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        n_results: parseInt(count)
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                
+                displayResults(data.results);
+                updateChart(data.results);
+                
+                document.getElementById('resultsContainer').style.display = 'block';
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred during search');
+            }
+        }
+        
+        function displayResults(results) {
+            const resultsContainer = document.getElementById('results');
+            resultsContainer.innerHTML = '';
+            
+            results.forEach(result => {
+                const card = document.createElement('div');
+                card.className = 'result-card';
+                card.innerHTML = `
+                    <h3>Candidate ${result.id} (${result.category})</h3>
+                    <p><strong>Match:</strong> ${(result.similarity * 100).toFixed(1)}%</p>
+                    <p>${result.excerpt}</p>
+                `;
+                resultsContainer.appendChild(card);
+            });
+        }
+        
+        function updateChart(results) {
+            const ctx = document.getElementById('similarityChart').getContext('2d');
+            
+            if (similarityChart) {
+                similarityChart.destroy();
+            }
+            
+            similarityChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: results.map(r => `Candidate ${r.id}`),
+                    datasets: [{
+                        label: 'Match Score',
+                        data: results.map(r => r.similarity * 100),
+                        backgroundColor: 'rgba(66, 133, 244, 0.7)',
+                        borderColor: 'rgba(66, 133, 244, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: 'Match Score (%)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
 </body>
 </html>
